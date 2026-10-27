@@ -3,7 +3,6 @@ from schemas.user_schema import User
 import db
 
 router_user = APIRouter(tags=['User'], prefix='/users')
-# get, create, update, delete
 
 @router_user.get('/')
 async def get_users():

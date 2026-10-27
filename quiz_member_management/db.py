@@ -1,5 +1,5 @@
 from schemas.user_schema import User
-# select, insert, update, delete
+from pydantic import EmailStr
 
 users: list[User] = []
 
@@ -40,3 +40,13 @@ async def delete_user(id: str) -> User | None:
             return new_users
 
     return None
+
+async def sign_in(email: EmailStr, pw: str) -> tuple[User | None, str | None]:
+    for u in users:
+        if u.user_email == email:
+            if u.user_pw == pw:
+                return u, None
+
+            return None, "wrong_pw"
+
+        return None, "wrong_email"
