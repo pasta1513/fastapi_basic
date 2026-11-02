@@ -1,4 +1,6 @@
 from schemas.user_schemas import User
+from sqlalchemy.orm import Session
+from models import user_model
 
 users : list[User] = [
     User(username = 'aaa',
@@ -11,7 +13,18 @@ users : list[User] = [
          name = 'BBB'),
 ]
 
-async def select_users() -> list[User]:
+async def select_users(db: Session) -> list[User]:
+    userTable = db.query(user_model.User).all()
+    print("user table : ", userTable )
+    if len(userTable) == 0: #not userTable
+        return None
+    #users = User( **userTable.model_dump() )
+    users = [User.model_validate(user) for user in userTable]
+    '''
+    users = []
+    for user in userTable: #userTable = [객체1, 객체2]
+        users.append( User.model_validate(user) ) #db모델 -> 스키마 변환
+    '''
     return users
 
 async def select_user(email: str) -> User | None:
@@ -23,27 +36,76 @@ async def select_user(email: str) -> User | None:
         
     return None
 
-async def insert(user: User) -> User | None:
-    # print('insert user: ', user)
-    for u in users:
-        if u.email == user.email:
-            return None
-        
-    users.append(user)
+async def insert( user : User , db : Session) -> User | None:
+    exist_user =  ( 
+                    db.query(user_model.User)
+                    .filter( user_model.User.username == user.username)
+                    .first()
+                  )
+    if exist_user:
+        return None
+    userTable = user_model.User( **user.model_dump())
+    print("저장 전 확인 id : ",userTable.id ) #id 없음
+    db.add( userTable ) #insert db 임시 저장
+    db.commit() #db 완벽히 저장
+    db.refresh(userTable) #저장된 정보를 다시 가져옴
+    print("저장 후 확인 id : ",userTable.id) #id 존재함
+
     return user
 
-async def update(username: str, user: User):
+from schemas.user_update_schemas import UserUpdate
+
+async def update(username:str, user:UserUpdate, db:Session):
+    user_table =  (db.query(user_model.User)
+                    .filter(user_model.User.username == username)
+                    .first())
+    if user_table is None:
+        return None
+    
+    #user_table.email = user.email
+    #user_table.name = user.name
+
+    user_dict = user.model_dump(exclude_unset = True)
+    print("user_dict : ", user_dict)
+    #{email:aaa@aaa.aaa, name:홍길동}
+    for k, v in user_dict.items():
+        setattr(user_table, k, v)
+   
+    db.commit()
+    db.refresh(user_table)
+
+    return User.model_validate( user_table )
+
+    '''
     for i, u in enumerate(users):
         if u.username == username:
             users[i] = user
+            #u = user
             return u
+    '''
 
-    return None
+async def delete(username: str, db: Session):
+    # for i, u in enumerate(users):
+    #     if u.username == username:
+    #         delete_user = users.pop(i)
+    #         return delete_user
 
-async def delete(username: str):
-    for i, u in enumerate(users):
-        if u.username == username:
-            delete_user = users.pop(i)
-            return delete_user
+    # return None
+    user_table =  (db.query(user_model.User)
+                    .filter( user_model.User.username == username)
+                    .first())
+    
+    if user_table is None:
+        return None
 
-    return None
+    db.delete(user_table)
+    db.commit()
+
+    return User.model_validate(user_table)
+
+async def db_get_one(id:int, db:Session) -> User | None:
+    userTable = db.get(user_model.User, id)
+    if not userTable:
+        return None
+
+    return User.model_validate( userTable )
